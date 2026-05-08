@@ -97,7 +97,7 @@ class SessionsScreen(ctk.CTkFrame):
 
         self._appt_table = ctk.CTkScrollableFrame(right, fg_color="transparent")
         self._appt_table.grid(row=1, column=0, sticky="nsew", padx=16, pady=16)
-        for col in range(7):
+        for col in range(6):
             self._appt_table.grid_columnconfigure(col, weight=1)
 
     def refresh(self):
@@ -138,6 +138,22 @@ class SessionsScreen(ctk.CTkFrame):
         self._render_sessions()
         self._render_appointments(session_id)
 
+    # Role ordering and colours for grouped view
+    _ROLE_ORDER = [
+        "Superintendent", "Deputy Superintendent", "Invigilator",
+        "Resident Inspector", "Distributing Inspector", "Member Inspection Squad",
+        "Paper Checker",
+    ]
+    _ROLE_COLORS = {
+        "Superintendent":          "#154360",
+        "Deputy Superintendent":   "#1a5276",
+        "Invigilator":             "#1a7a4a",
+        "Resident Inspector":      "#7d6608",
+        "Distributing Inspector":  "#6c3483",
+        "Member Inspection Squad": "#922b21",
+        "Paper Checker":           "#2e86c1",
+    }
+
     def _render_appointments(self, session_id):
         s = get_session_by_id(session_id)
         if s:
@@ -146,46 +162,78 @@ class SessionsScreen(ctk.CTkFrame):
         for w in self._appt_table.winfo_children():
             w.destroy()
 
-        headers = ["Name", "CNIC", "Role", "Centre", "Letter No.", "Status", "Actions"]
-        for col, h in enumerate(headers):
-            f = ctk.CTkFrame(self._appt_table, fg_color=IUB_GREEN, corner_radius=0)
-            f.grid(row=0, column=col, sticky="ew", padx=1, pady=1)
-            ctk.CTkLabel(f, text=h, font=ctk.CTkFont(size=10, weight="bold"),
-                         text_color="white").pack(padx=6, pady=4)
-
         appts = get_appointments_for_session(session_id)
         if not appts:
             ctk.CTkLabel(self._appt_table, text="No appointments yet.",
                          font=ctk.CTkFont(size=10),
                          text_color="gray").grid(
-                row=1, column=0, columnspan=7, pady=20)
+                row=0, column=0, columnspan=6, pady=20)
             return
 
-        for i, a in enumerate(appts):
-            bg           = IUB_LIGHT if i % 2 == 0 else "white"
-            status_color = "#1a8754" if a["status"] == "billed" else "gray"
-            for col, val in enumerate([a["full_name"], a["cnic"], a["role"],
-                                        a["centre"] or "—", a["letter_no"] or "—"]):
-                f = ctk.CTkFrame(self._appt_table, fg_color=bg, corner_radius=0)
-                f.grid(row=i + 1, column=col, sticky="ew", padx=1, pady=1)
-                ctk.CTkLabel(f, text=val, font=ctk.CTkFont(size=10),
-                             wraplength=120,
-                             text_color="#111111").pack(padx=6, pady=4, anchor="w")
-            sf = ctk.CTkFrame(self._appt_table, fg_color=bg, corner_radius=0)
-            sf.grid(row=i + 1, column=5, sticky="ew", padx=1, pady=1)
-            ctk.CTkLabel(sf, text=a["status"].capitalize(),
-                         font=ctk.CTkFont(size=10, weight="bold"),
-                         text_color=status_color).pack(padx=6, pady=4)
-            af = ctk.CTkFrame(self._appt_table, fg_color=bg, corner_radius=0)
-            af.grid(row=i + 1, column=6, sticky="ew", padx=1, pady=1)
-            ctk.CTkButton(af, text="Preview Letter", width=100, height=26,
-                          font=ctk.CTkFont(size=9), fg_color=IUB_GREEN,
-                          command=lambda aid=a["id"]: self._gen_letter(aid)
-                          ).pack(side="left", padx=3, pady=4)
-            ctk.CTkButton(af, text="Delete", width=60, height=26,
-                          font=ctk.CTkFont(size=9), fg_color="#922b21",
-                          command=lambda aid=a["id"], name=a["full_name"]: self._delete_appt(aid, name)
-                          ).pack(side="left", padx=3, pady=4)
+        # Group by role preserving preferred order
+        from collections import OrderedDict
+        groups = OrderedDict()
+        for role in self._ROLE_ORDER:
+            groups[role] = []
+        for a in appts:
+            r = a["role"]
+            if r not in groups:
+                groups[r] = []
+            groups[r].append(a)
+
+        row = 0
+        for col in range(6):
+            self._appt_table.grid_columnconfigure(col, weight=1)
+
+        for role, members in groups.items():
+            if not members:
+                continue
+            role_color = self._ROLE_COLORS.get(role, IUB_GREEN)
+
+            # Role section header
+            sec_hdr = ctk.CTkFrame(self._appt_table, fg_color=role_color, corner_radius=4)
+            sec_hdr.grid(row=row, column=0, columnspan=6, sticky="ew",
+                         padx=2, pady=(8, 0))
+            ctk.CTkLabel(sec_hdr,
+                         text=f"  {role}  ({len(members)})",
+                         font=ctk.CTkFont(size=11, weight="bold"),
+                         text_color="white").pack(side="left", padx=10, pady=5)
+            row += 1
+
+            # Column headers for this group
+            for col, h in enumerate(["Name", "CNIC", "Centre", "Letter No.", "Status", "Actions"]):
+                f = ctk.CTkFrame(self._appt_table, fg_color=IUB_LIGHT, corner_radius=0)
+                f.grid(row=row, column=col, sticky="ew", padx=1, pady=0)
+                ctk.CTkLabel(f, text=h, font=ctk.CTkFont(size=9, weight="bold"),
+                             text_color=IUB_GREEN).pack(padx=6, pady=3)
+            row += 1
+
+            for j, a in enumerate(members):
+                bg           = "white" if j % 2 == 0 else IUB_LIGHT
+                status_color = "#1a8754" if a["status"] == "billed" else "gray"
+                for col, val in enumerate([a["full_name"], a["cnic"],
+                                            a["centre"] or "—", a["letter_no"] or "—"]):
+                    f = ctk.CTkFrame(self._appt_table, fg_color=bg, corner_radius=0)
+                    f.grid(row=row, column=col, sticky="ew", padx=1, pady=1)
+                    ctk.CTkLabel(f, text=val, font=ctk.CTkFont(size=10),
+                                 wraplength=130,
+                                 text_color="#111111").pack(padx=6, pady=4, anchor="w")
+                sf = ctk.CTkFrame(self._appt_table, fg_color=bg, corner_radius=0)
+                sf.grid(row=row, column=4, sticky="ew", padx=1, pady=1)
+                ctk.CTkLabel(sf, text=a["status"].capitalize(),
+                             font=ctk.CTkFont(size=10, weight="bold"),
+                             text_color=status_color).pack(padx=6, pady=4)
+                af = ctk.CTkFrame(self._appt_table, fg_color=bg, corner_radius=0)
+                af.grid(row=row, column=5, sticky="ew", padx=1, pady=1)
+                ctk.CTkButton(af, text="Preview Letter", width=100, height=26,
+                              font=ctk.CTkFont(size=9), fg_color=role_color,
+                              command=lambda aid=a["id"]: self._gen_letter(aid)
+                              ).pack(side="left", padx=3, pady=4)
+                ctk.CTkButton(af, text="Delete", width=60, height=26,
+                              font=ctk.CTkFont(size=9), fg_color="#922b21",
+                              command=lambda aid=a["id"], nm=a["full_name"]: self._delete_appt(aid, nm)
+                              ).pack(side="left", padx=3, pady=4)
+                row += 1
 
     def _delete_session(self):
         if not self._selected_session:

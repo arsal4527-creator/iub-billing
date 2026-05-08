@@ -132,6 +132,18 @@ class ApplicationsScreen(ctk.CTkFrame):
             text_color="white", font=ctk.CTkFont(size=10),
             command=self._next_page)
         self._next_btn.pack(side="left", padx=8, pady=6)
+        # Apollo-style page jump
+        ctk.CTkLabel(pbar, text="Go to page:",
+                     font=ctk.CTkFont(size=10),
+                     text_color="gray").pack(side="left", padx=(20, 4))
+        self._jump_var = ctk.StringVar()
+        self._total_pages = 1
+        jump_entry = ctk.CTkEntry(pbar, textvariable=self._jump_var,
+                                   width=48, height=26,
+                                   font=ctk.CTkFont(size=10),
+                                   placeholder_text="#")
+        jump_entry.pack(side="left", padx=2, pady=6)
+        jump_entry.bind("<Return>", self._jump_to_page)
 
     # ── Session filter ─────────────────────────────────────────────────────────
 
@@ -169,6 +181,16 @@ class ApplicationsScreen(ctk.CTkFrame):
         self._page += 1
         self.refresh()
 
+    def _jump_to_page(self, _=None):
+        try:
+            pg = int(self._jump_var.get().strip()) - 1
+            if 0 <= pg < self._total_pages:
+                self._page = pg
+                self.refresh()
+        except ValueError:
+            pass
+        self._jump_var.set("")
+
     # ── Refresh ────────────────────────────────────────────────────────────────
 
     def refresh(self):
@@ -196,11 +218,12 @@ class ApplicationsScreen(ctk.CTkFrame):
         else:
             all_apps = get_all_applications(search=search, status_filter=status_arg)
 
-        total       = len(all_apps)
-        total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
-        self._page  = min(self._page, total_pages - 1)
-        start       = self._page * PAGE_SIZE
-        apps        = all_apps[start:start + PAGE_SIZE]
+        total            = len(all_apps)
+        total_pages      = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+        self._total_pages = total_pages
+        self._page       = min(self._page, total_pages - 1)
+        start            = self._page * PAGE_SIZE
+        apps             = all_apps[start:start + PAGE_SIZE]
 
         self._page_label.configure(
             text=f"Page {self._page + 1} of {total_pages}  ({total} total)")
@@ -405,67 +428,76 @@ class ApplicationsScreen(ctk.CTkFrame):
 # ── Session Picker Dialog ──────────────────────────────────────────────────────
 
 class _SessionPickerDialog(ctk.CTkToplevel):
-    """
-    Lets the user pick an existing session or create a new one.
-    After confirmation, calls on_confirm(session_id, session_name).
-    """
+    """Pick an existing session or create a new one before CSV import."""
+
     def __init__(self, parent_screen, sessions, on_confirm):
         super().__init__()
         self.parent_screen = parent_screen
         self.sessions      = sessions
         self.on_confirm    = on_confirm
-        self.title("Select Session for Import")
-        self.geometry("460x280")
+        self.title("Import CSV — Select Session")
+        self.geometry("520x230")
         self.resizable(False, False)
         self.grab_set()
         self._build()
 
     def _build(self):
-        f = ctk.CTkFrame(self, fg_color="transparent")
-        f.pack(fill="both", expand=True, padx=24, pady=20)
-        f.grid_columnconfigure(1, weight=1)
-
-        ctk.CTkLabel(f, text="Which session is this import for?",
+        # ── Header bar ────────────────────────────────────────────────────────
+        hdr = ctk.CTkFrame(self, fg_color=IUB_GREEN, corner_radius=0, height=46)
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        ctk.CTkLabel(hdr, text="Import CSV — Select Session",
                      font=ctk.CTkFont(size=13, weight="bold"),
-                     text_color=IUB_GREEN).grid(
-            row=0, column=0, columnspan=2, pady=(0, 14))
+                     text_color="white").pack(side="left", padx=16, pady=12)
 
-        ctk.CTkLabel(f, text="ℹ  All imported applicants will be linked to this session\n"
-                              "and will appear in Sessions & Appointments after appointment.",
-                     font=ctk.CTkFont(size=9), text_color="gray",
-                     justify="left").grid(
-            row=1, column=0, columnspan=2, sticky="w", pady=(0, 14))
+        # ── Body ─────────────────────────────────────────────────────────────
+        body = ctk.CTkFrame(self, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=20, pady=16)
 
-        # Existing session picker
+        # Row 1 — Current session dropdown
+        r1 = ctk.CTkFrame(body, fg_color="transparent")
+        r1.pack(fill="x", pady=(0, 8))
+        ctk.CTkLabel(r1, text="Current:",
+                     font=ctk.CTkFont(size=11, weight="bold"),
+                     text_color=IUB_GREEN,
+                     width=64, anchor="w").pack(side="left")
         session_names = [s["session_name"] for s in self.sessions]
-        ctk.CTkLabel(f, text="Existing session:",
-                     font=ctk.CTkFont(size=11)).grid(row=2, column=0, sticky="w", pady=4)
-        self._sess_var = ctk.StringVar(value=session_names[0] if session_names else "")
+        self._sess_var = ctk.StringVar(
+            value=session_names[0] if session_names else "")
         self._sess_menu = ctk.CTkOptionMenu(
-            f, variable=self._sess_var,
-            values=session_names or ["(No sessions yet)"],
-            width=260)
-        self._sess_menu.grid(row=2, column=1, padx=8, pady=4)
+            r1, variable=self._sess_var,
+            values=session_names if session_names else ["(no sessions yet)"],
+            width=380)
+        self._sess_menu.pack(side="left", padx=(8, 0))
 
-        # New session name
-        ctk.CTkLabel(f, text="Or create new:",
-                     font=ctk.CTkFont(size=11)).grid(row=3, column=0, sticky="w", pady=4)
+        # Row 2 — New session name + year (inline)
+        r2 = ctk.CTkFrame(body, fg_color="transparent")
+        r2.pack(fill="x", pady=(0, 4))
+        ctk.CTkLabel(r2, text="New:",
+                     font=ctk.CTkFont(size=11, weight="bold"),
+                     text_color=IUB_GREEN,
+                     width=64, anchor="w").pack(side="left")
         self._new_name_var = ctk.StringVar()
-        ctk.CTkEntry(f, textvariable=self._new_name_var, width=260,
-                     placeholder_text="Session name  (e.g. Spring 2025)").grid(
-            row=3, column=1, padx=8, pady=4)
-
-        ctk.CTkLabel(f, text="Year:",
-                     font=ctk.CTkFont(size=11)).grid(row=4, column=0, sticky="w", pady=4)
+        ctk.CTkEntry(r2, textvariable=self._new_name_var, width=260,
+                     placeholder_text="Session name  (e.g. ADP Spring 2026)").pack(
+            side="left", padx=(8, 8))
+        ctk.CTkLabel(r2, text="Year:",
+                     font=ctk.CTkFont(size=11)).pack(side="left")
         self._new_year_var = ctk.StringVar()
-        ctk.CTkEntry(f, textvariable=self._new_year_var, width=120,
-                     placeholder_text="2025").grid(
-            row=4, column=1, padx=8, pady=4, sticky="w")
+        ctk.CTkEntry(r2, textvariable=self._new_year_var, width=72,
+                     placeholder_text="2026").pack(side="left", padx=(6, 0))
 
-        btn_f = ctk.CTkFrame(f, fg_color="transparent")
-        btn_f.grid(row=5, column=0, columnspan=2, pady=16)
+        # Hint
+        ctk.CTkLabel(body,
+                     text='Fill "New" to create a new session — leave blank to use the current one above.',
+                     font=ctk.CTkFont(size=9), text_color="gray").pack(anchor="w", pady=(0, 10))
+
+        # Buttons
+        btn_f = ctk.CTkFrame(body, fg_color="transparent")
+        btn_f.pack()
         ctk.CTkButton(btn_f, text="Select File & Import",
-                      fg_color=IUB_GREEN, width=160,
+                      fg_color=IUB_GREEN, width=170,
+                      font=ctk.CTkFont(size=11, weight="bold"),
                       command=self._confirm).pack(side="left", padx=8)
         ctk.CTkButton(btn_f, text="Cancel", fg_color="gray",
                       width=80, command=self.destroy).pack(side="left")
@@ -475,24 +507,22 @@ class _SessionPickerDialog(ctk.CTkToplevel):
         new_year = self._new_year_var.get().strip()
 
         if new_name:
-            # Create a new session in exam_sessions
             if not new_year:
                 messagebox.showerror("Validation",
                                      "Please enter a year for the new session.",
                                      parent=self)
                 return
             try:
-                session_id = add_session(new_name, "", new_year)
+                session_id   = add_session(new_name, "", new_year)
                 session_name = new_name
             except Exception as e:
                 messagebox.showerror("Error", str(e), parent=self)
                 return
         else:
-            # Use the selected existing session
             sel_name = self._sess_var.get().strip()
-            if not sel_name or sel_name == "(No sessions yet)":
+            if not sel_name or sel_name == "(no sessions yet)":
                 messagebox.showerror("Validation",
-                                     "Please select an existing session or create a new one.",
+                                     "Please select an existing session or fill in a new name.",
                                      parent=self)
                 return
             match = next((s for s in self.sessions

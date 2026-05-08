@@ -447,183 +447,150 @@ def generate_paper_checker_bill(bill_data, appt, duties, session_name):
 
 # ── Appointment Letter ─────────────────────────────────────────────────────────
 
-def _letter_body(role, appt, session_name, styles):
-    """Return a list of ReportLab flowables for the role-specific letter body."""
-    name    = appt.get("full_name", "")
-    centre  = appt.get("centre", "")
-    desig   = appt.get("designation", "") or ""
-    inst    = appt.get("institution", "") or ""
+def generate_appointment_letter(appt, session_name):
+    """Generate appointment letter in official IUB format."""
+    role        = appt.get("role", "")
+    name        = appt.get("full_name", "")
+    designation = appt.get("designation", "") or ""
+    institution = appt.get("institution", "") or ""
+    cnic        = appt.get("cnic", "")
+    phone       = appt.get("phone", "") or ""
+    centre      = appt.get("centre", "") or ""
+    letter_no   = appt.get("letter_no", "") or ""
+    letter_date = appt.get("letter_date", "") or datetime.now().strftime("%d/%m/%Y")
 
-    bodies = {
-        "Superintendent": (
-            f"I am directed to inform you that you have been appointed as "
-            f"<b>Superintendent</b> at <b>{centre}</b> for the <b>{session_name}</b>. "
-            f"You are required to ensure the smooth and transparent conduct of the examination "
-            f"at your centre in accordance with the Examination Rules of The Islamia University "
-            f"of Bahawalpur. You will be responsible for the collection and safe custody of "
-            f"question papers, proper seating of candidates, maintenance of discipline, and "
-            f"timely dispatch of answer books to the Examinations Branch. "
-            f"Your remuneration will be paid as per the prescribed rates after submission of "
-            f"the duly completed duty register.",
-            "I hereby accept the appointment as Superintendent and undertake to perform all "
-            "duties assigned to me in accordance with the University's Examination Rules and "
-            "Regulations, maintaining the highest standards of integrity and fairness.",
-            "Signature of Superintendent"
-        ),
-        "Deputy Superintendent": (
-            f"I am directed to inform you that you have been appointed as "
-            f"<b>Deputy Superintendent</b> at <b>{centre}</b> for the <b>{session_name}</b>. "
-            f"You will assist the Superintendent in the overall management of the examination "
-            f"centre, including supervision of invigilators, maintenance of attendance sheets, "
-            f"and ensuring the sanctity of the examination process. You are required to carry "
-            f"out all instructions of the Superintendent and the Examinations Branch. "
-            f"Your remuneration will be paid as per the prescribed rates after the completion "
-            f"of examination duties.",
-            "I hereby accept the appointment as Deputy Superintendent and undertake to assist "
-            "the Superintendent and perform all assigned duties in strict accordance with the "
-            "University's Examination Rules.",
-            "Signature of Deputy Superintendent"
-        ),
-        "Resident Inspector": (
-            f"I am directed to inform you that you have been appointed as "
-            f"<b>Resident Inspector</b> for the <b>{session_name}</b>. "
-            f"You are required to visit the assigned examination centres regularly, ensure "
-            f"compliance with the University's Examination Rules, check for any malpractice, "
-            f"and submit daily inspection reports to the Controller of Examinations. "
-            f"You will also coordinate with Superintendents to resolve any issues arising "
-            f"during the examination period. "
-            f"Your remuneration will be paid as per the prescribed rates on completion of duty.",
-            "I hereby accept the appointment as Resident Inspector and undertake to perform "
-            "regular inspections and submit accurate reports in accordance with the University's "
-            "directives.",
-            "Signature of Resident Inspector"
-        ),
-        "Distributing Inspector": (
-            f"I am directed to inform you that you have been appointed as "
-            f"<b>Distributing Inspector</b> for the <b>{session_name}</b>. "
-            f"You are required to collect the sealed question paper packets from the "
-            f"Examinations Branch and distribute them to the designated examination centres "
-            f"on the scheduled dates. You must maintain a proper record of distribution "
-            f"and obtain signatures from the Superintendents upon delivery. "
-            f"Your remuneration will be paid as per the prescribed rates on completion of duty.",
-            "I hereby accept the appointment as Distributing Inspector and undertake to "
-            "distribute question papers securely and maintain accurate records as required "
-            "by the University's Examination Rules.",
-            "Signature of Distributing Inspector"
-        ),
-        "Member Inspection Squad": (
-            f"I am directed to inform you that you have been appointed as "
-            f"<b>Member of the Inspection Squad</b> for the <b>{session_name}</b>. "
-            f"As a member of the Inspection Squad, you are required to conduct surprise "
-            f"visits to examination centres, ensure strict observance of examination rules, "
-            f"report any irregularities or malpractice to the Controller of Examinations, "
-            f"and take immediate corrective action where necessary. "
-            f"Your remuneration will be paid as per the prescribed rates on submission of "
-            f"completed duty reports.",
-            "I hereby accept the appointment as Member of the Inspection Squad and undertake "
-            "to conduct thorough and impartial inspections as directed by the Controller of "
-            "Examinations.",
-            "Signature of Member (Inspection Squad)"
-        ),
-        "Invigilator": (
-            f"I am directed to inform you that you have been appointed as "
-            f"<b>Invigilator</b> at <b>{centre}</b> for the <b>{session_name}</b>. "
-            f"You are required to report for duty at least 30 minutes before the commencement "
-            f"of each examination session. You will be responsible for the proper seating of "
-            f"candidates, distribution of answer books, prevention of any form of malpractice, "
-            f"and collection of answer books at the end of each session. "
-            f"You must strictly follow the instructions of the Superintendent and the "
-            f"Examinations Branch. Your remuneration will be paid as per Form 95-A rates "
-            f"after completion of duty.",
-            "I hereby accept the appointment as Invigilator and undertake to perform "
-            "invigilator duties honestly and diligently in accordance with the University's "
-            "Examination Rules, under the supervision of the Superintendent.",
-            "Signature of Invigilator"
-        ),
-    }
+    path = _output_path(_make_filename("Letter", role, name, cnic))
+    doc  = SimpleDocTemplate(path, pagesize=A4,
+                             leftMargin=2.5*cm, rightMargin=2.5*cm,
+                             topMargin=2*cm,    bottomMargin=2*cm)
+    styles = _base_styles()
+    elems  = []
 
-    # Use role-specific text or fall back to generic
-    if role in bodies:
-        body_text, acceptance_text, sig_label = bodies[role]
-    else:
-        body_text = (
-            f"I am directed to inform you that you have been appointed as <b>{role}</b> "
-            f"at <b>{centre}</b> for the <b>{session_name}</b>. You are requested to "
-            f"perform your duties diligently in accordance with the University's rules "
-            f"and regulations."
-        )
-        acceptance_text = (
-            f"I hereby accept the appointment as {role} for the {session_name} and "
-            f"undertake to perform the assigned duties in accordance with the University's "
-            f"rules and regulations."
-        )
-        sig_label = "Signature of Appointee"
+    # ── University header ──────────────────────────────────────────────────────
+    elems.append(Paragraph(
+        "The Islamia University of Bahawalpur", styles["IUBTitle"]))
+    elems.append(Paragraph(
+        "Examinations Department", styles["IUBSub"]))
+    elems.append(Paragraph(
+        "(0349-4440047)", styles["IUBSmall"]))
+    elems.append(HRFlowable(width="100%", thickness=1.5, color=IUB_GREEN))
+    elems.append(Spacer(1, 0.4*cm))
 
-    elems = []
-    elems.append(Paragraph(body_text, styles["FieldValue"]))
-    elems.append(Spacer(1, 0.8*cm))
-    sig = Table(
+    # ── No. / Date row ─────────────────────────────────────────────────────────
+    no_date = Table(
+        [["",
+          Paragraph(
+              f"<b>No.</b> {letter_no}/Cond/Exam<br/>"
+              f"<b>Dated:</b>  {letter_date}",
+              styles["RightNorm"]
+          )]],
+        colWidths=[12*cm, 7*cm]
+    )
+    no_date.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    elems.append(no_date)
+    elems.append(Spacer(1, 0.2*cm))
+
+    # ── Addressee ──────────────────────────────────────────────────────────────
+    elems.append(Paragraph("To,", styles["FieldValue"]))
+    addr_lines = [f"<b>{name}</b>"]
+    if designation:
+        addr_lines.append(designation)
+    addr_lines.append(f"({cnic})")
+    if institution:
+        addr_lines.append(institution)
+    elems.append(Paragraph("<br/>".join(addr_lines), styles["FieldValue"]))
+    elems.append(Spacer(1, 0.4*cm))
+
+    # ── Salutation & body ──────────────────────────────────────────────────────
+    elems.append(Paragraph("Dear Sir / Madam,", styles["FieldValue"]))
+    elems.append(Spacer(1, 0.3*cm))
+    elems.append(Paragraph(
+        f"I have the honor to inform you that you have been appointed as "
+        f"<b>{role}</b> in <b>{session_name}</b>",
+        styles["FieldValue"]
+    ))
+    elems.append(Spacer(1, 0.3*cm))
+    elems.append(Paragraph(
+        "If you are available to act as such on the following rates, you are requested "
+        "to send your willingness to the undersigned immediately on the enclosed forms.",
+        styles["FieldValue"]
+    ))
+    elems.append(Spacer(1, 0.2*cm))
+    elems.append(Paragraph(
+        "You are directed to reach the Centre / Office one day before (at 02:00 PM) the "
+        "commencement of the Examination to help the Superintendent in making necessary "
+        "arrangements for conduct of Examination.",
+        styles["FieldValue"]
+    ))
+    elems.append(Spacer(1, 0.3*cm))
+
+    # ── Notes ──────────────────────────────────────────────────────────────────
+    elems.append(Paragraph("<b>NOTE:</b>", styles["FieldLabel"]))
+    for i, note in enumerate([
+        "Mobile phone is neither allowed to candidate nor to the Supervisory Staff "
+        "except Superintendent.",
+        "Please ensure the searching of all candidates before entry to the Examination hall.",
+        "Check the Original CNIC and Roll No. slips of the candidates.",
+        "NO T.A / D.A WILL BE ALLOWED.",
+    ], 1):
+        elems.append(Paragraph(f"{i}. {note}", styles["FieldValue"]))
+    elems.append(Spacer(1, 0.5*cm))
+
+    # ── Sign-off ───────────────────────────────────────────────────────────────
+    elems.append(Paragraph("Yours Sincerely", styles["FieldValue"]))
+    elems.append(Spacer(1, 1.2*cm))
+    sign_off = Table(
         [[Paragraph(
-            "________________________\n<b>Additional Controller of Examinations</b>\n"
-            "The Islamia University of Bahawalpur",
-            styles["CenterNorm"]
+            "Additional Controller of Examinations<br/>"
+            "For Controller of Examinations",
+            styles["FieldValue"]
         )]],
         colWidths=[19*cm]
     )
-    sig.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "RIGHT")]))
-    elems.append(sig)
-    elems.append(Spacer(1, 1*cm))
+    sign_off.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "RIGHT")]))
+    elems.append(sign_off)
+    elems.append(Spacer(1, 0.5*cm))
+
+    # ── Form of Acceptance ─────────────────────────────────────────────────────
     elems.append(HRFlowable(width="100%", thickness=1, color=IUB_GREEN))
     elems.append(Spacer(1, 0.3*cm))
+    elems.append(Paragraph(
+        "The Islamia University of Bahawalpur", styles["IUBTitle"]))
+    elems.append(Spacer(1, 0.1*cm))
     elems.append(Paragraph("<b>FORM OF ACCEPTANCE</b>", styles["BillTitle"]))
     elems.append(Spacer(1, 0.3*cm))
     elems.append(Paragraph(
-        f"I, <b>{name}</b>, {desig}{', ' + inst if inst else ''}, "
-        f"{acceptance_text}",
+        f"I accept the offer to work as <b>{role}</b> in <b>{session_name}</b> "
+        f"at <b>{centre}</b> on the terms and conditions mentioned in the covering letter. "
+        f"I certify that none of my relative(s) is appearing in the said Examination "
+        f"Centre within jurisdiction of the Islamia University of Bahawalpur.",
         styles["FieldValue"]
-    ))
-    elems.append(Spacer(1, 1*cm))
-    elems.append(Table(
-        [[Paragraph(f"________________________\n{sig_label}", styles["CenterNorm"]),
-          Paragraph("________________________\nDate", styles["CenterNorm"])]],
-        colWidths=[9.5*cm, 9.5*cm]
-    ))
-    return elems
-
-
-def generate_appointment_letter(appt, session_name):
-    role = appt.get("role", "")
-    path = _output_path(_make_filename("Letter", role, appt.get("full_name",""), appt.get("cnic","")))
-    doc = SimpleDocTemplate(path, pagesize=A4,
-                            leftMargin=2.5*cm, rightMargin=2.5*cm,
-                            topMargin=2*cm, bottomMargin=2*cm)
-    styles = _base_styles()
-    elems = _header(styles)
-
-    date_now = datetime.now().strftime("%d %B, %Y")
-    elems.append(Table(
-        [[Paragraph("", styles["FieldValue"]),
-          Paragraph(
-              f"<b>No.:</b> {appt.get('letter_no','')}<br/><b>Date:</b> {date_now}",
-              styles["RightNorm"]
-          )]],
-        colWidths=[10*cm, 9*cm]
     ))
     elems.append(Spacer(1, 0.5*cm))
 
-    addr_parts = [appt.get("full_name", ""), appt.get("designation", "") or "", appt.get("institution", "") or ""]
-    addr_text = "<br/>".join(p for p in addr_parts if p)
-    elems.append(Paragraph(f"<b>To:</b><br/>{addr_text}", styles["FieldValue"]))
+    # Acceptance field table
+    accept_rows = [
+        [Paragraph(f"<b>Name:</b> {name}", styles["FieldValue"]),
+         Paragraph(f"<b>Phone No.</b> {phone}", styles["FieldValue"])],
+        [Paragraph(f"<b>Address:</b> {institution}", styles["FieldValue"]), ""],
+        [Paragraph("Signature:  ________________________", styles["FieldValue"]),
+         Paragraph(f"<b>ID:</b>  {cnic}", styles["FieldValue"])],
+    ]
+    at = Table(accept_rows, colWidths=[10.5*cm, 8.5*cm])
+    at.setStyle(TableStyle([
+        ("VALIGN",         (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING",     (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING",  (0, 0), (-1, -1), 4),
+        ("SPAN",           (0, 1), (1,  1)),
+    ]))
+    elems.append(at)
     elems.append(Spacer(1, 0.4*cm))
-    elems.append(Paragraph("Dear Sir/Madam,", styles["FieldValue"]))
-    elems.append(Spacer(1, 0.3*cm))
     elems.append(Paragraph(
-        f"<b>Subject: APPOINTMENT OF {role.upper()} FOR THE {session_name.upper()}</b>",
-        styles["FieldLabel"]
+        f"At <b>{centre}</b><br/>"
+        f"<b>{session_name}</b> w.e.f. {letter_date}",
+        styles["FieldValue"]
     ))
-    elems.append(Spacer(1, 0.3*cm))
 
-    elems.extend(_letter_body(role, appt, session_name, styles))
     doc.build(elems)
     return path
 
@@ -635,143 +602,75 @@ FORM95A_ROLES   = {"Invigilator", "Deputy Superintendent"}
 
 
 def get_letter_preview_text(appt, session_name):
-    """Return plain-text letter content for preview (no HTML tags)."""
-    role      = appt.get("role", "")
-    name      = appt.get("full_name", "")
-    centre    = appt.get("centre", "") or ""
-    desig     = appt.get("designation", "") or ""
-    inst      = appt.get("institution", "") or ""
-    letter_no = appt.get("letter_no", "") or ""
-    date_now  = datetime.now().strftime("%d %B, %Y")
+    """Return plain-text letter content for preview — matches official IUB format."""
+    role        = appt.get("role", "")
+    name        = appt.get("full_name", "")
+    designation = appt.get("designation", "") or ""
+    institution = appt.get("institution", "") or ""
+    cnic        = appt.get("cnic", "")
+    phone       = appt.get("phone", "") or ""
+    centre      = appt.get("centre", "") or ""
+    letter_no   = appt.get("letter_no", "") or ""
+    letter_date = appt.get("letter_date", "") or datetime.now().strftime("%d/%m/%Y")
 
-    bodies = {
-        "Superintendent": (
-            f"I am directed to inform you that you have been appointed as Superintendent at "
-            f"{centre} for the {session_name}. You are required to ensure the smooth and "
-            f"transparent conduct of the examination at your centre in accordance with the "
-            f"Examination Rules of The Islamia University of Bahawalpur. You will be responsible "
-            f"for the collection and safe custody of question papers, proper seating of candidates, "
-            f"maintenance of discipline, and timely dispatch of answer books to the Examinations "
-            f"Branch. Your remuneration will be paid as per the prescribed rates after submission "
-            f"of the duly completed duty register.",
-            "I hereby accept the appointment as Superintendent and undertake to perform all duties "
-            "assigned to me in accordance with the University's Examination Rules and Regulations, "
-            "maintaining the highest standards of integrity and fairness.",
-            "Signature of Superintendent",
-        ),
-        "Deputy Superintendent": (
-            f"I am directed to inform you that you have been appointed as Deputy Superintendent "
-            f"at {centre} for the {session_name}. You will assist the Superintendent in the "
-            f"overall management of the examination centre, including supervision of invigilators, "
-            f"maintenance of attendance sheets, and ensuring the sanctity of the examination "
-            f"process. You are required to carry out all instructions of the Superintendent and "
-            f"the Examinations Branch. Your remuneration will be paid as per the prescribed rates "
-            f"after the completion of examination duties.",
-            "I hereby accept the appointment as Deputy Superintendent and undertake to assist the "
-            "Superintendent and perform all assigned duties in strict accordance with the "
-            "University's Examination Rules.",
-            "Signature of Deputy Superintendent",
-        ),
-        "Resident Inspector": (
-            f"I am directed to inform you that you have been appointed as Resident Inspector for "
-            f"the {session_name}. You are required to visit the assigned examination centres "
-            f"regularly, ensure compliance with the University's Examination Rules, check for any "
-            f"malpractice, and submit daily inspection reports to the Controller of Examinations. "
-            f"You will also coordinate with Superintendents to resolve any issues arising during "
-            f"the examination period. Your remuneration will be paid as per the prescribed rates "
-            f"on completion of duty.",
-            "I hereby accept the appointment as Resident Inspector and undertake to perform "
-            "regular inspections and submit accurate reports in accordance with the University's "
-            "directives.",
-            "Signature of Resident Inspector",
-        ),
-        "Distributing Inspector": (
-            f"I am directed to inform you that you have been appointed as Distributing Inspector "
-            f"for the {session_name}. You are required to collect the sealed question paper "
-            f"packets from the Examinations Branch and distribute them to the designated "
-            f"examination centres on the scheduled dates. You must maintain a proper record of "
-            f"distribution and obtain signatures from the Superintendents upon delivery. Your "
-            f"remuneration will be paid as per the prescribed rates on completion of duty.",
-            "I hereby accept the appointment as Distributing Inspector and undertake to distribute "
-            "question papers securely and maintain accurate records as required by the University's "
-            "Examination Rules.",
-            "Signature of Distributing Inspector",
-        ),
-        "Member Inspection Squad": (
-            f"I am directed to inform you that you have been appointed as Member of the Inspection "
-            f"Squad for the {session_name}. As a member of the Inspection Squad, you are required "
-            f"to conduct surprise visits to examination centres, ensure strict observance of "
-            f"examination rules, report any irregularities or malpractice to the Controller of "
-            f"Examinations, and take immediate corrective action where necessary. Your remuneration "
-            f"will be paid as per the prescribed rates on submission of completed duty reports.",
-            "I hereby accept the appointment as Member of the Inspection Squad and undertake to "
-            "conduct thorough and impartial inspections as directed by the Controller of "
-            "Examinations.",
-            "Signature of Member (Inspection Squad)",
-        ),
-        "Invigilator": (
-            f"I am directed to inform you that you have been appointed as Invigilator at "
-            f"{centre} for the {session_name}. You are required to report for duty at least "
-            f"30 minutes before the commencement of each examination session. You will be "
-            f"responsible for the proper seating of candidates, distribution of answer books, "
-            f"prevention of any form of malpractice, and collection of answer books at the end "
-            f"of each session. You must strictly follow the instructions of the Superintendent "
-            f"and the Examinations Branch. Your remuneration will be paid as per Form 95-A rates "
-            f"after completion of duty.",
-            "I hereby accept the appointment as Invigilator and undertake to perform invigilator "
-            "duties honestly and diligently in accordance with the University's Examination Rules, "
-            "under the supervision of the Superintendent.",
-            "Signature of Invigilator",
-        ),
-    }
-
-    if role in bodies:
-        body_text, acceptance_text, sig_label = bodies[role]
-    else:
-        body_text = (
-            f"I am directed to inform you that you have been appointed as {role} at {centre} "
-            f"for the {session_name}. You are requested to perform your duties diligently in "
-            f"accordance with the University's rules and regulations."
-        )
-        acceptance_text = (
-            f"I hereby accept the appointment as {role} for the {session_name} and undertake "
-            f"to perform the assigned duties in accordance with the University's rules and "
-            f"regulations."
-        )
-        sig_label = "Signature of Appointee"
+    addr = [name]
+    if designation:
+        addr.append(designation)
+    addr.append(f"({cnic})")
+    if institution:
+        addr.append(institution)
 
     lines = [
-        f"No.: {letter_no}",
-        f"Date: {date_now}",
-        "",
-        "To:",
-        name,
-    ]
-    if desig:
-        lines.append(desig)
-    if inst:
-        lines.append(inst)
-    lines += [
-        "",
-        "Dear Sir/Madam,",
-        "",
-        f"Subject: APPOINTMENT OF {role.upper()} FOR THE {session_name.upper()}",
-        "",
-        body_text,
-        "",
-        "Yours faithfully,",
-        "",
-        "________________________",
-        "Additional Controller of Examinations",
         "The Islamia University of Bahawalpur",
+        "Examinations Department",
+        "(0349-4440047)",
+        "─" * 58,
+        f"No. {letter_no}/Cond/Exam                              Dated: {letter_date}",
         "",
-        "─" * 55,
+        "To,",
+    ] + addr + [
+        "",
+        "Dear Sir / Madam,",
+        "",
+        f"I have the honor to inform you that you have been appointed as {role}",
+        f"in {session_name}",
+        "",
+        "If you are available to act as such on the following rates, you are requested",
+        "to send your willingness to the undersigned immediately on the enclosed forms.",
+        "You are directed to reach the Centre / Office one day before (at 02:00 PM) the",
+        "commencement of the Examination to help the Superintendent in making necessary",
+        "arrangements for conduct of Examination.",
+        "",
+        "NOTE:",
+        "1. Mobile phone is neither allowed to candidate nor to the Supervisory Staff",
+        "   except Superintendent.",
+        "2. Please ensure the searching of all candidates before entry to the Examination hall.",
+        "3. Check the Original CNIC and Roll No. slips of the candidates.",
+        "4. NO T.A / D.A WILL BE ALLOWED.",
+        "",
+        "Yours Sincerely",
+        "",
+        "",
+        "                                       Additional Controller of Examinations",
+        "                                       For Controller of Examinations",
+        "",
+        "─" * 58,
+        "The Islamia University of Bahawalpur",
         "FORM OF ACCEPTANCE",
         "",
-        f"I, {name}, {desig}{', ' + inst if inst else ''}, {acceptance_text}",
+        f"I accept the offer to work as {role} in {session_name}",
+        f"at {centre}",
+        "on the terms and conditions mentioned in the covering letter. I certify that",
+        "none of my relative(s) is appearing in the said Examination Centre within",
+        "jurisdiction of the Islamia University of Bahawalpur.",
         "",
-        f"{sig_label}: ________________________",
-        "Date: ________________________",
+        f"Name: {name}     Phone No. {phone}",
+        f"Address: {institution}",
+        "",
+        f"Signature: ________________________    ID: {cnic}",
+        "",
+        f"At {centre}",
+        f"{session_name} w.e.f. {letter_date}",
     ]
     return "\n".join(lines)
 
