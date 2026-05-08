@@ -154,6 +154,23 @@ def init_db():
         conn.commit()
     finally:
         conn.close()
+    _migrate_applications()
+
+
+def _migrate_applications():
+    """Add session_id column to applications if not already present."""
+    conn = get_connection()
+    try:
+        cols = [r[1] for r in conn.execute(
+            "PRAGMA table_info(applications)").fetchall()]
+        if "session_id" not in cols:
+            conn.execute(
+                "ALTER TABLE applications ADD COLUMN session_id INTEGER "
+                "REFERENCES exam_sessions(id)"
+            )
+            conn.commit()
+    finally:
+        conn.close()
 
 
 # ── Settings / PIN ─────────────────────────────────────────────────────────────
@@ -901,7 +918,7 @@ def add_application(data: dict):
                 exp_dy_supt_years, exp_dy_supt_inst,
                 exp_invig_years, exp_invig_inst,
                 proposed_station_1, proposed_station_2, proposed_station_3,
-                status, created_at
+                session_id, status, created_at
             ) VALUES (
                 :full_name, :father_name, :cnic, :gender, :ntn, :tax_filer,
                 :qualification, :post, :basic_pay_scale, :district,
@@ -912,9 +929,9 @@ def add_application(data: dict):
                 :exp_dy_supt_years, :exp_dy_supt_inst,
                 :exp_invig_years, :exp_invig_inst,
                 :proposed_station_1, :proposed_station_2, :proposed_station_3,
-                'applied', :created_at
+                :session_id, 'applied', :created_at
             )
-        """, {**data, "created_at": now})
+        """, {"session_id": None, **data, "created_at": now})
         new_id = cur.lastrowid
         conn.commit()
         audit(conn, "application_add", f"Applied: {data.get('full_name')} ({data.get('cnic')})")
@@ -959,6 +976,87 @@ def promote_application_to_staff(app_id):
         conn.execute("UPDATE applications SET status='appointed' WHERE id=?", (app_id,))
         conn.commit()
         audit(conn, "application_promoted", f"app_id={app_id} -> staff_id={staff_id}")
+        conn.commit()
+        return staff_id
+    finally:
+        conn.close()
+
+
+def get_applications_for_session(session_id, search="", status_filter=""):
+    conn = get_connection()
+    try:
+        query = "SELECT * FROM applications WHERE session_id = ?"
+        params = [session_id]
+        if search:
+            q = f"%{search}%"
+            query += " AND (full_name LIKE ? OR cnic LIKE ?)"
+            params.extend([q, q])
+        if status_filter and status_filter != "All":
+            query += " AND status = ?"
+            params.append(status_filter)
+        query += " ORDER BY full_name"
+        return conn.execute(query, params).fetchall()
+    finally:
+        conn.close()
+
+
+def appoint_from_application(app_id, role, centre="", letter_no="", letter_date=""):
+    """
+    Create a staff record (if needed) and an appointment from an application.
+    The application must have a session_id set.
+    Returns staff_id.
+    """
+    conn = get_connection()
+    try:
+        app = conn.execute(
+            "SELECT * FROM applications WHERE id=?", (app_id,)).fetchone()
+        if not app:
+            raise ValueError("Application not found.")
+
+        session_id = app["session_id"]
+        if not session_id:
+            raise ValueError(
+                "This application has no linked session. "
+                "Re-import the CSV with a session selected."
+            )
+
+        # Get or create staff record
+        existing = conn.execute(
+            "SELECT id FROM staff WHERE cnic=?", (app["cnic"],)).fetchone()
+        if existing:
+            staff_id = existing["id"]
+        else:
+            now = datetime.now().isoformat()
+            cur = conn.execute(
+                "INSERT INTO staff "
+                "(full_name,cnic,phone,address,designation,institution,created_at) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (app["full_name"], app["cnic"],
+                 app["mobile"] or app["phone_res"] or "",
+                 app["residential_address"] or "",
+                 app["post"] or "", app["institution"] or "", now)
+            )
+            staff_id = cur.lastrowid
+
+        # Create appointment
+        now = datetime.now().isoformat()
+        try:
+            conn.execute(
+                "INSERT INTO appointments "
+                "(staff_id,session_id,role,centre,letter_no,letter_date,status,created_at) "
+                "VALUES (?,?,?,?,?,?,'appointed',?)",
+                (staff_id, session_id, role, centre, letter_no, letter_date, now)
+            )
+        except Exception as e:
+            if "UNIQUE" in str(e):
+                raise ValueError(
+                    f"{app['full_name']} already has a {role} appointment in this session.")
+            raise
+
+        conn.execute("UPDATE applications SET status='appointed' WHERE id=?", (app_id,))
+        conn.commit()
+        audit(conn, "appoint_from_application",
+              f"app_id={app_id} staff_id={staff_id} session_id={session_id} role={role}")
         conn.commit()
         return staff_id
     finally:

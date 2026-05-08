@@ -63,10 +63,11 @@ def _format_cnic(raw):
     return raw.strip()
 
 
-def import_from_csv_file(filepath, session_tag=None):
+def import_from_csv_file(filepath, session_id=None, session_tag=None):
     """
     Import applications from a local CSV file (including Google Form exports).
-    Column names are matched case-insensitively using startswith against COLUMN_MAP.
+    Pass session_id (int) to link applicants to an exam session.
+    session_tag is kept for backward compatibility but session_id takes precedence.
     Returns (imported_count, skipped_count, error_message)
     """
     import csv
@@ -125,10 +126,13 @@ def import_from_csv_file(filepath, session_tag=None):
                 data[k] = 0
 
         final = {**_DEFAULTS, **data}
+        if session_id:
+            final["session_id"] = session_id
 
         try:
             app_id = add_application(final)
-            if session_tag and app_id:
+            if session_tag and app_id and not session_id:
+                # Legacy path: update text tag only when no real session_id given
                 conn = get_connection()
                 try:
                     conn.execute("UPDATE applications SET session_tag=? WHERE id=?",
