@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+venv311/
+.venv/
+
+# Database (live data — never commit)
+iub_billing.db
+*.db-shm
+*.db-wal
+
+# Generated outputs
+outputs/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
