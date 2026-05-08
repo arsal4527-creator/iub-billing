@@ -19,17 +19,21 @@ def _validate_cnic(cnic):
 def _load_grouped_data():
     conn = get_connection()
     try:
-        rows = conn.execute(
-            "SELECT full_name, cnic, apply_for, institution, status, session_tag "
-            "FROM applications ORDER BY session_tag, full_name"
-        ).fetchall()
+        rows = conn.execute("""
+            SELECT a.full_name, a.cnic, a.apply_for, a.institution,
+                   a.status, a.session_tag,
+                   COALESCE(es.session_name, a.session_tag) AS resolved_session
+            FROM applications a
+            LEFT JOIN exam_sessions es ON a.session_id = es.id
+            ORDER BY resolved_session, a.full_name
+        """).fetchall()
     except Exception:
         return {}
     finally:
         conn.close()
     groups = {}
     for row in rows:
-        tag = row["session_tag"] or "— No Session —"
+        tag = row["resolved_session"] or "— No Session —"
         if tag not in groups:
             groups[tag] = {s: [] for s in STATUS_ORDER}
         status = row["status"] or "applied"
